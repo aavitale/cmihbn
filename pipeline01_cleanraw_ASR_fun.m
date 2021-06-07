@@ -23,11 +23,12 @@ function pipeline01_cleanraw_ASR_fun(cfg, subj_name, file_set)
 %% MY CONFIGURATION structure / paths
 if isempty(cfg)
     cfg.do_server = 0
-    cfg.eeglab_dir = fullfile(cfg.project_dir, 'tool', 'eeglab_20201226')
-    
-    cfg.project_dir = 'E:\CMI_EEG_PREProcess'
+    cfg.project_dir = 'C:\Users\Utente\Desktop\CMI_EEG_PREProcess'
+    %cfg.project_dir = 'E:\CMI_EEG_PREProcess'
     cfg.data_set_dir = fullfile(cfg.project_dir, 'data_set')
     cfg.save_dir = fullfile(cfg.project_dir, 'data_pipeline01')
+    
+    cfg.eeglab_dir = fullfile(cfg.project_dir, 'tool', 'eeglab_20201226')
     
     
     cfg.chan_toreject = {
@@ -65,6 +66,7 @@ save_dir = cfg.save_dir;
 if ~exist(save_dir); mkdir(save_dir); end
     
 if isempty(file_set)
+    % subj_name = 'NDARRZ199KNG'
     file_set = 'rs.set';
     % or - - - - - - - - - - -
     %file_set = 'desme.set';
@@ -137,7 +139,8 @@ try
     end
     
 
-    % Subset of 11 CHANNELS as EOG - - - - - - - - - - - - - - 
+    % CHANNEL SELECTION - - - - - - - - - - - - - - 
+    % subset of 11 channels as EOG
     chan_eye = {'E128', 'E32', 'E25', 'E21', 'E127', 'E17',...
             'E126', 'E14', 'E8', 'E1', 'E125'}
 
@@ -182,16 +185,16 @@ try
     % vis_artifacts to compare the cleaned data to the original.
     % ----------------------------------------------------------------
     
-    %   chancorr_crit                       - Correlation threshold. If a channel is correlated at less than this value
-    %                                           to its robust estimate (based on other channels), it is considered abnormal in
-    %                                           the given time window. OPTIONAL, default = 0.8.
-    %   chan_max_broken_time                - Maximum time (either in seconds or as fraction of the recording) during which a 
-    %                                           retained channel may be broken. Reasonable range: 0.1 (very aggressive) to 0.6
-    %                                           (very lax). OPTIONAL, default = 0.5.
-    %   chan_detect_num_iter                - Number of iterations the bad channel detection should run (default = 10)
-    %   chan_detected_fraction_threshold	- Fraction how often a channel has to be detected to be rejected in the final
-    %                                           rejection (default 0.5)
-    %   flatline_crit                       - Maximum duration a channel can be flat in seconds (default 'off')
+%   chancorr_crit                       - Correlation threshold. If a channel is correlated at less than this value
+%                                           to its robust estimate (based on other channels), it is considered abnormal in
+%                                           the given time window. OPTIONAL, default = 0.8.
+%   chan_max_broken_time                - Maximum time (either in seconds or as fraction of the recording) during which a 
+%                                           retained channel may be broken. Reasonable range: 0.1 (very aggressive) to 0.6
+%                                           (very lax). OPTIONAL, default = 0.5.
+%   chan_detect_num_iter                - Number of iterations the bad channel detection should run (default = 10)
+%   chan_detected_fraction_threshold	- Fraction how often a channel has to be detected to be rejected in the final
+%                                           rejection (default 0.5)
+%   flatline_crit                       - Maximum duration a channel can be flat in seconds (default 'off')
 
 
     if do_cleanraw
@@ -201,52 +204,144 @@ try
         %  NOTCH FILTER (instead of CLEANLINE)
         eeg_notch = pop_eegfiltnew(eeg_struct, 'locutoff',line_noise_freq-2, ...
                                 'hicutoff',line_noise_freq+2,'revfilt',1,'plotfreqz',1);
-
+        %rethrow(eeg_notch)
+        %pop_saveset(eeg_notch, 'filename', [ subj_name '_notch.set'])
         
-        % !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        % disp('The function clean_rawdata has been deprecated and is only kept for backward compatibility');
-        % disp('Use the clean_artifacts function instead.');
-                            
-        % !!! for setting the appropriate parameters of the function see this paper:
-        % https://pubmed.ncbi.nlm.nih.gov/31329105/
-        % (see also: Comments to the HAPPE paper, and how to choose the critical parameters
         
-%         eeg_cleanraw = pop_clean_rawdata(eeg_notch, ...
-%                     'FlatlineCriterion',5, ...
-%                     'ChannelCriterion',0.8, ...
-%                     'LineNoiseCriterion',4, ...
-%                     'Highpass','off','WindowCriterion','off', ...
-%                     'BurstCriterion',20, 'BurstRejection','off','Distance','Euclidian');
-%                     % !!! burst criterion OFF -> in order to repair but not to remove (cut) datapoint
-        %eeg_cleanraw = eeg_struct;
+        %----------------------------------------------------------------------
+        % ITERATION of BAD SAMPLE and CHANNEL DETECTION
+        %----------------------------------------------------------------------
+        n_iter = 5;  %10
+        bad_chan_table = zeros([n_iter, eeg_notch.nbchan]) -1;
+        bad_sample_table = zeros([n_iter, eeg_notch.pnts]) -1;
         
-        [ eeg_cleanraw, HP, BUR, bad_chan_cleanraw ] = clean_artifacts(eeg_notch, ...
+        for i_iter = 1:n_iter
+            %fprintf('... do CLEANRAW iteration on data already REPAIRED \n')
+            %[eeg_cleanraw_iter, HP, BUR, bad_chan_cleanraw] = clean_artifacts(eeg_cleanraw_badchan_interp, ...
+            % or 
+            fprintf('... do CLEANRAW data on NOTCH filtered data \n')
+            [eeg_cleanraw_iter, HP, BUR, bad_chan_cleanraw] = clean_artifacts(eeg_notch, ...
                 'ChannelCriterion',0.8, ...
                 'LineNoiseCriterion',4, ...
                 'FlatlineCriterion',5, ...
                 'BurstCriterion',20, ...
                 'WindowCriterion','off', ...
                 'Highpass','off', ...
-                'BurstRejection','off')
-                
-         fprintf('!!! CLEANRAW data done .... \n')
-
+                'BurstRejection','on');  % <<< only for the purpose of identifying bad samples <<<<<<
+                %'BurstRejection','off');
         
-        % STILL TO IMPLEMENT: 
-        % - ITERATION of clean artifact algorithm (as in BEMOBIL pipeline)
-        % - extraction of (%) BAD SAMPLES 
-            % NO SAMPLE rejected 
-            %     bad_sample_cleanraw = eeg_cleanraw.etc.clean_sample_mask;
-            %     % percentage of data kept
-            %     bad_data_percent = sum(bad_sample_cleanraw)/eeg_struct.pnts*100
-            %     disp(['percentage of data suggested for removal = % ' num2str(bad_data_percent)])
-
-        bad_chan_cleanraw = eeg_cleanraw.etc.clean_channel_mask;
+            %vis_artifacts(eeg_cleanraw_iter,eeg_notch)
+             
+            % 0 means NO BAD channel/sample;  1 means BAD channel samples
+            % (if some -1 value remains in the table.... something wrong !!
+            bad_chan_table(i_iter,:) = ~eeg_cleanraw_iter.etc.clean_channel_mask;
+            bad_sample_table(i_iter,:) = ~eeg_cleanraw_iter.etc.clean_sample_mask;
+        end
+        fprintf('!!! CLEANRAW iteration done .... \n')
+            
+        bad_chan_idx = find(sum(bad_chan_table,1) > 7);  % bad channel identified in more than 7 iteration
+        bad_sample_idx = find(sum(bad_sample_table,1) > 7);  % bad channel identified in more than 7 iteration
+        bad_sample_perc = sum(bad_sample_table,2) ./ eeg_notch.pnts *100
         
-        % INTERPOLATE (before ICA ??) using also the channels prune in the next step
+        % - - - - - - - - - - - - -  - -- -  -- - - - 
+        % final ATTEMPT TO REPAIR the BAD SAMPLEs:
+        [eeg_cleanraw, HP, BUR, bad_chan_cleanraw] = clean_artifacts(eeg_notch, ...
+                'ChannelCriterion',0.8, ...
+                'LineNoiseCriterion',4, ...
+                'FlatlineCriterion',5, ...
+                'BurstCriterion',20, ...
+                'WindowCriterion','off', ...
+                'Highpass','off', ...
+                'BurstRejection','off');  % <<<<<< repair and not removal <<<<<<<<<<<<
+            fprintf('!!! CLEANRAW data done .... \n')
+
+        % use vis_artifact to look at the difference between clean and raw data
+        %vis_artifacts(eeg_cleanraw,eeg_notch)
+        %vis_artifacts(eeg_cleanraw_iter,eeg_cleanraw)
+        %vis_artifacts(eeg_cleanraw_iter,eeg_cleanraw_badchan_interp)
+        
+        %bad_chan_cleanraw = eeg_cleanraw.etc.clean_channel_mask;
+        bad_chan_label = {};
+        xx = 1;
+        for i_chan = 1:length(eeg_cleanraw.etc.clean_channel_mask)
+            if ~eeg_cleanraw.etc.clean_channel_mask(i_chan)
+                bad_chan_label{1,xx} = eeg_notch.chanlocs(i_chan).labels;
+                xx = xx+1;
+            end
+        end
+        
+        % - - - - - - - - - - 
+        % CHECK which portion of the data is still considered as artifactual (even after ASR)
+        [eeg_cleanraw_ASR2, HP, BUR, bad_chan_cleanraw] = clean_artifacts(eeg_cleanraw, ...
+                'ChannelCriterion',0.8, ...
+                'LineNoiseCriterion',4, ...
+                'FlatlineCriterion',5, ...
+                'BurstCriterion',20, ...
+                'WindowCriterion','off', ...
+                'Highpass','off', ...
+                'BurstRejection','on');  % 
+            fprintf('!!! CLEANRAW + second run of ASR done .... \n')
+
+        % some PLOTs = = =  = = = = = = = = = = 
+         if do_save_fig
+            
+            %color_lim = [ 1 n_iter ];
+            figure; set(gcf,'position',[10,10,1800,1000])
+            subplot(231) 
+            imagesc(bad_chan_table')
+            xlabel('iteration'); ylabel('CHANNEL')
+            %caxis(color_lim)
+            title([' n° BAD CHAN = ' num2str(length(bad_chan_idx))])
+
+            %subplot(234); topoplot( ~eeg_cleanraw_iter.etc.clean_channel_mask, eeg_cleanraw.chanlocs, ...
+            subplot(234); topoplot( sum(bad_chan_table,1), eeg_notch.chanlocs, ...
+                                    'electrodes','labelpoint','chaninfo',eeg_notch.chaninfo) ;
+            %colormap(gca,'gray')
+            title(bad_chan_label)
+
+            subplot(2,3,2:3) 
+            imagesc(bad_sample_table)
+            ylabel('iteration'); xlabel('(BAD) SAMPLE  (10k samples = 40 sec)')
+             title([' % of BAD SAMPLE = ' num2str(mean(bad_sample_perc))])
+
+            % AFTER second round of ASR
+            bad_sample_ASR2_table = double(~eeg_cleanraw_ASR2.etc.clean_sample_mask);
+            subplot(3,3,8:9) 
+    %         plot(sum(bad_sample_table,1)); 
+    %         xlim([1 eeg_notch.pnts])
+    %         ylabel({'n iteration';'where a sample is identified as BAD'})
+            imagesc(bad_sample_ASR2_table); 
+            colormap(gca,'gray')
+            title('BAD segment  after initial ASR repair')
+            
+            cd(save_dir)
+            save_name = [ subj_name '_' file_set(1:end-4) '_bad_sample&channel.jpg']
+            saveas(gcf, save_name)
+        end
+            
+        % = = = = = = = = = = = = = = = = = = = = = =
+        % INTERPOLATE (before ICA ??) using also the channels to be pruned in the next step
+        fprintf('... channel interpolation \n')
         eeg_cleanraw_badchan_interp = pop_interp(eeg_cleanraw, eeg_struct.chanlocs, 'spherical');
+        % !!! also Cz is interpolated 
         
-    
+        % !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        % disp('The function clean_rawdata has been deprecated and is only kept for backward compatibility');
+        % disp('Use the clean_artifacts function instead.');
+        
+        % !!! for setting the appropriate parameters of the function see this paper:
+        % https://pubmed.ncbi.nlm.nih.gov/31329105/
+        % (see also: Comments to the HAPPE paper, and how to choose the critical parameters
+            
+        %         eeg_cleanraw = pop_clean_rawdata(eeg_notch, ...
+        %                     'FlatlineCriterion',5, ...
+        %                     'ChannelCriterion',0.8, ...
+        %                     'LineNoiseCriterion',4, ...
+        %                     'Highpass','off','WindowCriterion','off', ...
+        %                     'BurstCriterion',20, 'BurstRejection','off','Distance','Euclidian');
+        %                     % !!! burst criterion OFF -> in order to repair but not to remove (cut) datapoint
+        %eeg_cleanraw = eeg_struct;
+        
         %  RE-REFERENCE to the AVERAGE    
         eeg_cleanraw_avgref = pop_reref(eeg_cleanraw_badchan_interp, []);
         %eeg_avgref = eeg_struct;
