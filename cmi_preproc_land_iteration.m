@@ -182,8 +182,9 @@ if cfg.pp.do_cleanraw
         title('BAD segment  after initial ASR repair')
         
         cd(save_dir)
-        save_name = [ subj_name '_' file_set(1:end-4) '_bad_sample&channel.jpg']
-        saveas(gcf, save_name)
+        %save_name = [ subj_name '_' file_set(1:end-4) '_bad_sample&channel.jpg']
+        fname2save = fullfile(cfg.preproc_data_dir, subid, dataType, sprintf('%s_%s_bad_sample&channel.jpg',subid,dataType));
+        saveas(gcf, fname2save)
     end
     
     % = = = = = = = = = = = = = = = = = = = = = =
